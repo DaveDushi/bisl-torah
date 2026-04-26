@@ -71,6 +71,18 @@ impl Config {
         Ok(cfg)
     }
 
+    pub fn save(&self) -> Result<()> {
+        let path = paths::config_path()?;
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("creating config dir {}", parent.display()))?;
+        }
+        let contents = toml::to_string_pretty(self).context("serializing config")?;
+        fs::write(&path, contents)
+            .with_context(|| format!("writing config {}", path.display()))?;
+        Ok(())
+    }
+
     pub fn ensure_starter() -> Result<bool> {
         let path = paths::config_path()?;
         if path.exists() {
@@ -144,5 +156,23 @@ mod tests {
     #[test]
     fn starter_toml_parses() {
         let _: Config = toml::from_str(STARTER_TOML).unwrap();
+    }
+
+    #[test]
+    fn round_trips_through_toml() {
+        let original = Config {
+            categories: vec!["Halakhah".into(), "Tanakh".into()],
+            layout: Layout::SideBySide,
+            default_lang: Lang::English,
+            nikud: false,
+            display: DisplayMode::WtSplit,
+        };
+        let serialized = toml::to_string_pretty(&original).unwrap();
+        let parsed: Config = toml::from_str(&serialized).unwrap();
+        assert_eq!(parsed.categories, original.categories);
+        assert_eq!(parsed.layout, original.layout);
+        assert_eq!(parsed.default_lang, original.default_lang);
+        assert_eq!(parsed.nikud, original.nikud);
+        assert_eq!(parsed.display, original.display);
     }
 }

@@ -15,6 +15,7 @@ mod install;
 mod log;
 mod paths;
 mod sefaria;
+mod settings;
 mod signals;
 mod state;
 mod viewer;
@@ -68,6 +69,8 @@ enum Cmd {
         #[arg(long = "no-nikud")]
         no_nikud: bool,
     },
+    /// Open an interactive editor for ~/.config/bisl-torah/config.toml.
+    Settings,
     /// Hook entry point: read JSON event from stdin and spawn the popup.
     HookOnPrompt,
     /// Hook entry point: read JSON event from stdin and signal the popup to soft-close.
@@ -117,6 +120,7 @@ fn main() {
             };
             cmd_show(session, signal_dir, display.map(Into::into), nikud_override)
         }
+        Cmd::Settings => cmd_settings(),
         Cmd::HookOnPrompt => hook::on_prompt(),
         Cmd::HookOnStop => hook::on_stop(),
     };
@@ -184,6 +188,13 @@ fn cmd_doctor() -> Result<()> {
     let report = doctor::run()?;
     doctor::print_report(&report);
     Ok(())
+}
+
+fn cmd_settings() -> Result<()> {
+    paths::ensure_dirs()?;
+    Config::ensure_starter()?;
+    let cfg = Config::load().context("loading config")?;
+    settings::run(cfg)
 }
 
 fn cmd_show(
