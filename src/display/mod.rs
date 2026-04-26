@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::Result;
 use tracing::info;
 
-use crate::config::DisplayMode;
+use crate::config::{DisplayMode, Popup};
 
 pub mod new_console;
 pub mod tmux;
@@ -35,7 +35,12 @@ fn auto_detect() -> Strategy {
     Strategy::NewConsole
 }
 
-pub fn spawn(strategy: Strategy, session_id: &str, signal_dir: &Path) -> Result<()> {
+pub fn spawn(
+    strategy: Strategy,
+    popup: &Popup,
+    session_id: &str,
+    signal_dir: &Path,
+) -> Result<()> {
     info!(strategy = ?strategy, session = %session_id, "spawning popup");
     let exe = current_exe_string()?;
     let signal_dir_str = signal_dir.to_string_lossy().to_string();
@@ -47,8 +52,13 @@ pub fn spawn(strategy: Strategy, session_id: &str, signal_dir: &Path) -> Result<
         signal_dir_str,
     ];
     match strategy {
-        Strategy::WtSplit => wt::spawn(&exe, &show_args),
-        Strategy::TmuxPopup => tmux::spawn(&exe, &show_args),
+        Strategy::WtSplit => wt::spawn(&exe, &show_args, popup.wt_width_fraction()),
+        Strategy::TmuxPopup => tmux::spawn(
+            &exe,
+            &show_args,
+            &popup.tmux_width_pct(),
+            &popup.tmux_height_pct(),
+        ),
         Strategy::NewConsole => new_console::spawn(&exe, &show_args),
     }
 }

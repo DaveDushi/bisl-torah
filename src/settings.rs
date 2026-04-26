@@ -13,7 +13,9 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use ratatui::{Frame, Terminal};
 
-use crate::config::{Config, DisplayMode, Lang, Layout};
+use crate::config::{
+    parse_percent, Config, DisplayMode, Lang, Layout, POPUP_MAX_PCT, POPUP_MIN_PCT,
+};
 use crate::paths;
 
 const KNOWN_CATEGORIES: &[&str] = &[
@@ -45,7 +47,12 @@ const FIELD_LABELS: &[&str] = &[
     "default_lang",
     "nikud",
     "display",
+    "popup.wt_width",
+    "popup.tmux_width",
+    "popup.tmux_height",
 ];
+
+const POPUP_STEP: i32 = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
@@ -81,6 +88,7 @@ impl Editor {
             || self.cfg.default_lang != self.original.default_lang
             || self.cfg.nikud != self.original.nikud
             || self.cfg.display != self.original.display
+            || self.cfg.popup != self.original.popup
     }
 }
 
@@ -236,8 +244,30 @@ fn cycle_field(editor: &mut Editor, delta: i32) {
         "default_lang" => editor.cfg.default_lang = cycle_lang(editor.cfg.default_lang, delta),
         "display" => editor.cfg.display = cycle_display(editor.cfg.display, delta),
         "nikud" => editor.cfg.nikud = !editor.cfg.nikud,
+        "popup.wt_width" => {
+            editor.cfg.popup.wt_width = step_percent(&editor.cfg.popup.wt_width, delta, "40%");
+        }
+        "popup.tmux_width" => {
+            editor.cfg.popup.tmux_width = step_percent(&editor.cfg.popup.tmux_width, delta, "80%");
+        }
+        "popup.tmux_height" => {
+            editor.cfg.popup.tmux_height =
+                step_percent(&editor.cfg.popup.tmux_height, delta, "70%");
+        }
         _ => {}
     }
+}
+
+/// Step a percentage string by `delta * POPUP_STEP`%, clamped to [POPUP_MIN_PCT, POPUP_MAX_PCT].
+/// Falls back to `default` if the current value can't be parsed.
+fn step_percent(current: &str, delta: i32, default: &str) -> String {
+    let current_pct = parse_percent(current)
+        .or_else(|| parse_percent(default))
+        .map(|f| (f * 100.0).round() as i32)
+        .unwrap_or(40);
+    let next = (current_pct + delta * POPUP_STEP)
+        .clamp(POPUP_MIN_PCT as i32, POPUP_MAX_PCT as i32);
+    format!("{}%", next)
 }
 
 fn cycle_layout(v: Layout, delta: i32) -> Layout {
@@ -371,6 +401,21 @@ fn draw_value_pane(f: &mut Frame, area: Rect, editor: &Editor) {
             display_label(editor.cfg.display).to_string(),
             "auto · wt-split · tmux-popup · new-console".to_string(),
             "←/→ to cycle".to_string(),
+        ),
+        "popup.wt_width" => (
+            editor.cfg.popup.wt_width.clone(),
+            format!("{}% – {}% in {}% steps", POPUP_MIN_PCT, POPUP_MAX_PCT, POPUP_STEP),
+            "←/→ to adjust by 5% (Windows Terminal split)".to_string(),
+        ),
+        "popup.tmux_width" => (
+            editor.cfg.popup.tmux_width.clone(),
+            format!("{}% – {}% in {}% steps", POPUP_MIN_PCT, POPUP_MAX_PCT, POPUP_STEP),
+            "←/→ to adjust by 5% (tmux popup width)".to_string(),
+        ),
+        "popup.tmux_height" => (
+            editor.cfg.popup.tmux_height.clone(),
+            format!("{}% – {}% in {}% steps", POPUP_MIN_PCT, POPUP_MAX_PCT, POPUP_STEP),
+            "←/→ to adjust by 5% (tmux popup height)".to_string(),
         ),
         _ => (String::new(), String::new(), String::new()),
     };
@@ -541,6 +586,34 @@ mod tests {
         let mut editor = Editor::new(cfg);
         assert!(!editor.dirty());
         editor.cfg.nikud = !editor.cfg.nikud;
+        assert!(editor.dirty());
+    }
+
+    #[test]
+    fn step_percent_advances_by_5() {
+        assert_eq!(step_percent("40%", 1, "40%"), "45%");
+        assert_eq!(step_percent("40%", -1, "40%"), "35%");
+        assert_eq!(step_percent("40%", 2, "40%"), "50%");
+    }
+
+    #[test]
+    fn step_percent_clamps_at_bounds() {
+        assert_eq!(step_percent("90%", 1, "40%"), "90%");
+        assert_eq!(step_percent("10%", -1, "40%"), "10%");
+        assert_eq!(step_percent("85%", 2, "40%"), "90%");
+    }
+
+    #[test]
+    fn step_percent_falls_back_to_default_on_garbage() {
+        assert_eq!(step_percent("garbage", 1, "40%"), "45%");
+    }
+
+    #[test]
+    fn dirty_flag_tracks_popup_changes() {
+        let cfg = Config::default();
+        let mut editor = Editor::new(cfg);
+        assert!(!editor.dirty());
+        editor.cfg.popup.wt_width = "50%".into();
         assert!(editor.dirty());
     }
 }

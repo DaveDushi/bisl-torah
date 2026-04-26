@@ -62,7 +62,7 @@ pub fn on_prompt() -> Result<()> {
     signals::remove_quiet(&signals::refresh_path(&signal_dir, &session_id));
 
     let strategy = display::detect(cfg.display);
-    if let Err(e) = display::spawn(strategy, &session_id, &signal_dir) {
+    if let Err(e) = display::spawn(strategy, &cfg.popup, &session_id, &signal_dir) {
         warn!(error = %e, "popup spawn failed");
     }
     Ok(())

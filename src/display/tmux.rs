@@ -4,14 +4,14 @@ use anyhow::{Context, Result};
 
 /// Spawn the popup as a tmux floating popup.
 ///
-///   tmux display-popup -E -h 70% -w 80% '<exe> <args...>'
+///   tmux display-popup -E -h <height> -w <width> '<exe> <args...>'
 ///
 /// `-E` makes the popup close when the inner command exits. We pass arguments as a
 /// single shell-escaped string because tmux invokes the command via `sh -c`.
-pub fn spawn(exe: &str, args: &[String]) -> Result<()> {
+pub fn spawn(exe: &str, args: &[String], width: &str, height: &str) -> Result<()> {
     let cmdline = build_cmdline(exe, args);
     let mut cmd = Command::new("tmux");
-    cmd.args(["display-popup", "-E", "-h", "70%", "-w", "80%", &cmdline])
+    cmd.args(["display-popup", "-E", "-h", height, "-w", width, &cmdline])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());

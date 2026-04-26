@@ -20,3 +20,11 @@ nikud = true
 # else new-console.
 # Override with: "wt-split", "tmux-popup", "new-console".
 display = "auto"
+
+# Popup pane sizing per display strategy. Values are percentages "10%"–"90%".
+# wt_width: fraction of the parent Windows Terminal pane.
+# tmux_width / tmux_height: floating popup size relative to the outer terminal.
+[popup]
+wt_width = "40%"
+tmux_width = "80%"
+tmux_height = "70%"

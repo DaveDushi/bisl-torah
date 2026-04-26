@@ -450,26 +450,116 @@ fn draw_footnotes(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(p, area);
 }
 
+const FOOTER_TITLE_MIN: usize = 10;
+
+const KEYHINTS_RUNNING: &[&str] = &[
+    "q quit · n next · b/h/e lang · v vowels · f footnotes · j/k scroll",
+    "q quit · n next · b/h/e lang · v vowels",
+    "q quit · n next",
+    "q quit",
+];
+
+const KEYHINTS_DONE: &[&str] = &[
+    "agent done — press any key",
+    "agent done",
+    "done",
+];
+
+/// Pick the longest keyhint that leaves at least `FOOTER_TITLE_MIN + 1` cols for the title.
+/// Falls back to the shortest variant if even that doesn't fit.
+fn pick_keyhint(footer_w: usize, done: DoneState) -> &'static str {
+    let variants = match done {
+        DoneState::Running => KEYHINTS_RUNNING,
+        DoneState::AgentDone => KEYHINTS_DONE,
+    };
+    for h in variants {
+        let w = h.chars().count();
+        if footer_w >= w + 1 + FOOTER_TITLE_MIN {
+            return h;
+        }
+    }
+    variants.last().copied().unwrap_or("")
+}
+
+fn truncate_with_ellipsis(s: &str, max: usize) -> String {
+    let count = s.chars().count();
+    if count <= max {
+        return s.to_string();
+    }
+    if max == 0 {
+        return String::new();
+    }
+    let take = max.saturating_sub(1);
+    let mut out: String = s.chars().take(take).collect();
+    out.push('…');
+    out
+}
+
+/// Build the footer's left-side title, picking the longest variant that fits in `budget` cols.
+///
+/// Tiers (longest first):
+///   1. " {citation} · {category}{prompt_full}"
+///   2. " {citation}{prompt_full}"           (drop category)
+///   3. " {citation}{prompt_short}"          (abbreviate to "· n")
+///   4. " {citation_truncated}{prompt_short}"
+///   5. " {citation_truncated}"              (drop the new-prompt indicator — last resort)
+fn build_footer_title(
+    citation: &str,
+    category: &str,
+    refresh_pending: bool,
+    budget: usize,
+) -> String {
+    let prompt_full = if refresh_pending { " · new prompt — press n" } else { "" };
+    let prompt_short = if refresh_pending { " · n" } else { "" };
+
+    let candidates: [String; 3] = [
+        format!(" {} · {}{}", citation, category, prompt_full),
+        format!(" {}{}", citation, prompt_full),
+        format!(" {}{}", citation, prompt_short),
+    ];
+    for c in &candidates {
+        if c.chars().count() <= budget {
+            return c.clone();
+        }
+    }
+
+    // Tier 4: ellipsis-truncate citation, keep "· n"
+    // Require at least 2 cols of citation budget so we keep at least one real char + ellipsis;
+    // " … · n" alone is uninformative — better to drop the suffix and show more citation.
+    let suffix_count = prompt_short.chars().count();
+    let leading = 1; // leading space
+    let cite_budget_with_suffix = budget.saturating_sub(leading + suffix_count);
+    if cite_budget_with_suffix >= 2 {
+        let cite = truncate_with_ellipsis(citation, cite_budget_with_suffix);
+        let candidate = format!(" {}{}", cite, prompt_short);
+        if candidate.chars().count() <= budget {
+            return candidate;
+        }
+    }
+
+    // Tier 5: drop the indicator entirely.
+    let cite_budget = budget.saturating_sub(leading);
+    let cite = truncate_with_ellipsis(citation, cite_budget);
+    format!(" {}", cite)
+}
+
 fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
     let display = if app.item.display_value.en.is_empty() {
         app.item.ref_.clone()
     } else {
         app.item.display_value.en.clone()
     };
-    let mut left = format!(" {} · {}", display, app.item.category);
-    if app.refresh_pending {
-        left.push_str(" · new prompt — press n");
-    }
-    let right = match app.done {
-        DoneState::Running => {
-            "q quit · n next · b/h/e lang · v vowels · f footnotes · j/k scroll".to_string()
-        }
-        DoneState::AgentDone => "agent done — press any key".to_string(),
-    };
+
+    let footer_w = area.width as usize;
+    let keyhint = pick_keyhint(footer_w, app.done);
+    let right_w = keyhint.chars().count();
+    let left_budget = footer_w.saturating_sub(right_w + 1);
+
+    let left = build_footer_title(&display, &app.item.category, app.refresh_pending, left_budget);
 
     let columns = RLayout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .constraints([Constraint::Min(0), Constraint::Length(right_w as u16 + 1)])
         .split(area);
 
     let style_left = match app.done {
@@ -481,7 +571,7 @@ fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
 
     let p_left = Paragraph::new(Span::styled(left, style_left));
     let p_right = Paragraph::new(Span::styled(
-        right,
+        keyhint,
         Style::default().add_modifier(Modifier::DIM),
     ))
     .alignment(ratatui::layout::Alignment::Right);
@@ -498,3 +588,100 @@ fn dummy_path() -> &'static Path {
 // Re-export Layout for callers convenience (kept private here).
 #[allow(dead_code)]
 fn _layout_marker(_l: Layout) {}
+
+#[cfg(test)]
+mod footer_tests {
+    use super::*;
+
+    #[test]
+    fn keyhint_full_at_wide_width() {
+        let h = pick_keyhint(120, DoneState::Running);
+        assert_eq!(h, KEYHINTS_RUNNING[0]);
+    }
+
+    #[test]
+    fn keyhint_drops_scroll_and_footnotes_at_medium() {
+        // Full is 66 chars; full + 1 + TITLE_MIN(10) = 77. At 70 wide we should drop to medium.
+        let h = pick_keyhint(70, DoneState::Running);
+        assert_eq!(h, KEYHINTS_RUNNING[1]);
+    }
+
+    #[test]
+    fn keyhint_minimal_q_n_at_narrow() {
+        // Should be wide enough for "q quit · n next" (15) + 1 + 10 = 26 but not for medium (40+1+10=51).
+        let h = pick_keyhint(30, DoneState::Running);
+        assert_eq!(h, "q quit · n next");
+    }
+
+    #[test]
+    fn keyhint_tiny_at_extreme_width() {
+        let h = pick_keyhint(20, DoneState::Running);
+        assert_eq!(h, "q quit");
+    }
+
+    #[test]
+    fn keyhint_falls_back_when_nothing_fits() {
+        // Even narrower than tiny + title_min: still returns the shortest variant.
+        let h = pick_keyhint(5, DoneState::Running);
+        assert_eq!(h, "q quit");
+    }
+
+    #[test]
+    fn keyhint_done_state_uses_done_variants() {
+        let h = pick_keyhint(120, DoneState::AgentDone);
+        assert_eq!(h, KEYHINTS_DONE[0]);
+    }
+
+    #[test]
+    fn title_full_form_at_wide_width() {
+        let title = build_footer_title("Mishnah Middot 4:4-5", "Mishnah", false, 80);
+        assert_eq!(title, " Mishnah Middot 4:4-5 · Mishnah");
+    }
+
+    #[test]
+    fn title_with_new_prompt_full() {
+        let title = build_footer_title("Mishnah Middot 4:4-5", "Mishnah", true, 80);
+        assert_eq!(title, " Mishnah Middot 4:4-5 · Mishnah · new prompt — press n");
+    }
+
+    #[test]
+    fn title_drops_category_at_medium() {
+        // " Mishnah Middot 4:4-5 · Mishnah" is 31 chars. budget=25 should drop category.
+        let title = build_footer_title("Mishnah Middot 4:4-5", "Mishnah", false, 25);
+        assert_eq!(title, " Mishnah Middot 4:4-5");
+    }
+
+    #[test]
+    fn title_abbreviates_new_prompt_at_narrow() {
+        // citation(20) + " · new prompt — press n"(23) + leading(1) = 44. budget=30 forces "· n".
+        let title = build_footer_title("Mishnah Middot 4:4-5", "Mishnah", true, 30);
+        assert_eq!(title, " Mishnah Middot 4:4-5 · n");
+    }
+
+    #[test]
+    fn title_truncates_citation_keeping_n_indicator() {
+        let title = build_footer_title("A Very Long Citation Text", "Mishnah", true, 15);
+        assert!(title.ends_with(" · n"));
+        assert!(title.contains('…'));
+        assert!(title.chars().count() <= 15);
+    }
+
+    #[test]
+    fn title_drops_n_indicator_at_extreme_narrow() {
+        let title = build_footer_title("Mishnah Middot 4:4-5", "Mishnah", true, 6);
+        assert!(!title.ends_with(" · n"));
+        assert!(title.chars().count() <= 6);
+    }
+
+    #[test]
+    fn title_no_refresh_no_n_suffix() {
+        let title = build_footer_title("Mishnah Middot 4:4-5", "Mishnah", false, 30);
+        assert!(!title.contains(" · n"));
+    }
+
+    #[test]
+    fn truncate_appends_ellipsis() {
+        assert_eq!(truncate_with_ellipsis("hello world", 6), "hello…");
+        assert_eq!(truncate_with_ellipsis("short", 10), "short");
+    }
+}

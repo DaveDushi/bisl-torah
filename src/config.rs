@@ -2,6 +2,7 @@ use std::fs;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 use crate::paths;
 
@@ -13,6 +14,70 @@ pub struct Config {
     pub default_lang: Lang,
     pub nikud: bool,
     pub display: DisplayMode,
+    pub popup: Popup,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct Popup {
+    pub wt_width: String,
+    pub tmux_width: String,
+    pub tmux_height: String,
+}
+
+impl Default for Popup {
+    fn default() -> Self {
+        Self {
+            wt_width: "40%".into(),
+            tmux_width: "80%".into(),
+            tmux_height: "70%".into(),
+        }
+    }
+}
+
+pub const POPUP_MIN_PCT: u32 = 10;
+pub const POPUP_MAX_PCT: u32 = 90;
+
+/// Parse a percentage value like "40%", "40", or " 40 % " into a fraction (0.40).
+/// Returns `None` on parse failure or out-of-range [POPUP_MIN_PCT, POPUP_MAX_PCT].
+pub fn parse_percent(s: &str) -> Option<f32> {
+    let trimmed = s.trim().trim_end_matches('%').trim();
+    let n: f32 = trimmed.parse().ok()?;
+    if n < POPUP_MIN_PCT as f32 || n > POPUP_MAX_PCT as f32 {
+        return None;
+    }
+    Some(n / 100.0)
+}
+
+/// Parse a percentage and fall back to default with a warning if invalid.
+fn percent_or_default(field: &str, value: &str, default: &str) -> f32 {
+    if let Some(v) = parse_percent(value) {
+        return v;
+    }
+    warn!(
+        "popup.{} invalid value {:?}, falling back to default {:?}",
+        field, value, default
+    );
+    parse_percent(default).expect("default percent must be valid")
+}
+
+impl Popup {
+    /// Resolved WT split fraction (0.10..=0.90).
+    pub fn wt_width_fraction(&self) -> f32 {
+        percent_or_default("wt_width", &self.wt_width, "40%")
+    }
+
+    /// Resolved tmux popup width as a clean "NN%" string.
+    pub fn tmux_width_pct(&self) -> String {
+        let f = percent_or_default("tmux_width", &self.tmux_width, "80%");
+        format!("{}%", (f * 100.0).round() as u32)
+    }
+
+    /// Resolved tmux popup height as a clean "NN%" string.
+    pub fn tmux_height_pct(&self) -> String {
+        let f = percent_or_default("tmux_height", &self.tmux_height, "70%");
+        format!("{}%", (f * 100.0).round() as u32)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -52,6 +117,7 @@ impl Default for Config {
             default_lang: Lang::Both,
             nikud: true,
             display: DisplayMode::Auto,
+            popup: Popup::default(),
         }
     }
 }
@@ -118,6 +184,85 @@ mod tests {
         assert_eq!(c.default_lang, Lang::Both);
         assert!(c.nikud);
         assert_eq!(c.display, DisplayMode::Auto);
+        assert_eq!(c.popup, Popup::default());
+        assert_eq!(c.popup.wt_width, "40%");
+        assert_eq!(c.popup.tmux_width, "80%");
+        assert_eq!(c.popup.tmux_height, "70%");
+    }
+
+    #[test]
+    fn parse_percent_accepts_with_and_without_sign() {
+        assert!((parse_percent("40%").unwrap() - 0.40).abs() < 1e-6);
+        assert!((parse_percent("40").unwrap() - 0.40).abs() < 1e-6);
+        assert!((parse_percent(" 65 % ").unwrap() - 0.65).abs() < 1e-6);
+    }
+
+    #[test]
+    fn parse_percent_rejects_garbage() {
+        assert!(parse_percent("abc").is_none());
+        assert!(parse_percent("").is_none());
+        assert!(parse_percent("%").is_none());
+    }
+
+    #[test]
+    fn parse_percent_clamps_out_of_range() {
+        assert!(parse_percent("0%").is_none());
+        assert!(parse_percent("5%").is_none());
+        assert!(parse_percent("150%").is_none());
+        assert!(parse_percent("-10%").is_none());
+    }
+
+    #[test]
+    fn popup_resolved_falls_back_on_invalid() {
+        let p = Popup {
+            wt_width: "150%".into(),
+            tmux_width: "garbage".into(),
+            tmux_height: "70%".into(),
+        };
+        assert!((p.wt_width_fraction() - 0.40).abs() < 1e-6);
+        assert_eq!(p.tmux_width_pct(), "80%");
+        assert_eq!(p.tmux_height_pct(), "70%");
+    }
+
+    #[test]
+    fn popup_round_trips_through_toml() {
+        let p = Popup {
+            wt_width: "50%".into(),
+            tmux_width: "75%".into(),
+            tmux_height: "65%".into(),
+        };
+        let toml = toml::to_string_pretty(&p).unwrap();
+        let parsed: Popup = toml::from_str(&toml).unwrap();
+        assert_eq!(parsed, p);
+    }
+
+    #[test]
+    fn config_with_popup_section_parses() {
+        let toml = r#"
+            categories = ["Halakhah"]
+            layout = "auto"
+            default_lang = "both"
+            nikud = true
+            display = "auto"
+
+            [popup]
+            wt_width = "55%"
+            tmux_width = "85%"
+            tmux_height = "75%"
+        "#;
+        let c: Config = toml::from_str(toml).unwrap();
+        assert_eq!(c.popup.wt_width, "55%");
+        assert_eq!(c.popup.tmux_width, "85%");
+        assert_eq!(c.popup.tmux_height, "75%");
+    }
+
+    #[test]
+    fn config_without_popup_section_uses_defaults() {
+        let toml = r#"
+            categories = ["Halakhah"]
+        "#;
+        let c: Config = toml::from_str(toml).unwrap();
+        assert_eq!(c.popup, Popup::default());
     }
 
     #[test]
@@ -166,6 +311,11 @@ mod tests {
             default_lang: Lang::English,
             nikud: false,
             display: DisplayMode::WtSplit,
+            popup: Popup {
+                wt_width: "55%".into(),
+                tmux_width: "85%".into(),
+                tmux_height: "65%".into(),
+            },
         };
         let serialized = toml::to_string_pretty(&original).unwrap();
         let parsed: Config = toml::from_str(&serialized).unwrap();
@@ -174,5 +324,6 @@ mod tests {
         assert_eq!(parsed.default_lang, original.default_lang);
         assert_eq!(parsed.nikud, original.nikud);
         assert_eq!(parsed.display, original.display);
+        assert_eq!(parsed.popup, original.popup);
     }
 }
