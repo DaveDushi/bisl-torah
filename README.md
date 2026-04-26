@@ -5,6 +5,8 @@
 While Claude Code (or any AI coding agent) is processing your prompt, a small popup opens beside your terminal with a piece of daily learning from [Sefaria](https://www.sefaria.org) — a halacha, a mishnah, a piece of Tanya. When the agent finishes, the popup invites you to dismiss it. The time you would have spent watching a spinner becomes time spent learning.
 
 The name plays on the Yiddish phrase *"a bisl Torah"* — "a little Torah." Instead of waiting time becoming *bitul torah* (Torah-study time wasted), it becomes a few moments of learning.
+<img width="1447" height="729" alt="WhatsApp Image 2026-04-26 at 19 54 28" src="https://github.com/user-attachments/assets/dfe8261b-f999-4902-b7d3-f92e3f6c83f1" />
+
 
 ## Install
 
