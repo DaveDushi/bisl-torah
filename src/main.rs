@@ -25,7 +25,7 @@ use crate::state::State;
 
 #[derive(Parser)]
 #[command(
-    name = "bitul-torah",
+    name = "bisl-torah",
     version,
     about = "Learn while your coding agent runs."
 )]
@@ -46,7 +46,7 @@ enum Cmd {
         #[arg(long)]
         project: bool,
     },
-    /// Remove the hooks bitul-torah added.
+    /// Remove the hooks bisl-torah added.
     Uninstall {
         #[arg(long)]
         project: bool,
@@ -133,7 +133,7 @@ fn cmd_init(scope: Scope) -> Result<()> {
         let cfg_path = paths::config_path()?;
         println!("config: wrote starter at {}", cfg_path.display());
     }
-    println!("\nrun `bitul-torah doctor` to validate.");
+    println!("\nrun `bisl-torah doctor` to validate.");
     Ok(())
 }
 

@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use directories::ProjectDirs;
 
 fn project_dirs() -> Result<ProjectDirs> {
-    ProjectDirs::from("", "", "bitul-torah").context("could not resolve project directories")
+    ProjectDirs::from("", "", "bisl-torah").context("could not resolve project directories")
 }
 
 pub fn data_dir() -> Result<PathBuf> {

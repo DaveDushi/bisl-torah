@@ -50,8 +50,8 @@ mod tests {
     #[test]
     fn safe_paths_pass_through() {
         assert_eq!(
-            shell_escape("/usr/local/bin/bitul-torah"),
-            "/usr/local/bin/bitul-torah"
+            shell_escape("/usr/local/bin/bisl-torah"),
+            "/usr/local/bin/bisl-torah"
         );
     }
 

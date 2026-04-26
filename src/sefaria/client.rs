@@ -84,7 +84,7 @@ impl Default for SefariaClient {
 impl SefariaClient {
     pub fn new(base: String) -> Self {
         let http = reqwest::blocking::Client::builder()
-            .user_agent(concat!("bitul-torah/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("bisl-torah/", env!("CARGO_PKG_VERSION")))
             .timeout(Duration::from_secs(10))
             .build()
             .expect("reqwest client");

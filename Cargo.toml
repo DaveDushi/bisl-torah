@@ -1,18 +1,18 @@
 [package]
-name = "bitul-torah"
+name = "bisl-torah"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
 description = "Learn while your coding agent runs. A side popup that shows daily Sefaria learning while Claude Code is thinking."
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/ddusi/bitul-torah"
-homepage = "https://github.com/ddusi/bitul-torah"
+repository = "https://github.com/ddusi/bisl-torah"
+homepage = "https://github.com/ddusi/bisl-torah"
 keywords = ["claude-code", "sefaria", "tui", "torah", "halacha"]
 categories = ["command-line-utilities"]
 readme = "README.md"
 
 [[bin]]
-name = "bitul-torah"
+name = "bisl-torah"
 path = "src/main.rs"
 
 [dependencies]

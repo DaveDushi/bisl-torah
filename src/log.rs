@@ -7,11 +7,11 @@ use crate::paths;
 pub fn init(verbose: bool) -> Result<WorkerGuard> {
     paths::ensure_dirs()?;
     let logs_dir = paths::logs_dir()?;
-    let appender = rolling::daily(&logs_dir, "bitul-torah.log");
+    let appender = rolling::daily(&logs_dir, "bisl-torah.log");
     let (non_blocking, guard) = tracing_appender::non_blocking(appender);
 
     let default_level = if verbose { "debug" } else { "warn" };
-    let env_filter = EnvFilter::try_from_env("BITUL_TORAH_LOG")
+    let env_filter = EnvFilter::try_from_env("BISL_TORAH_LOG")
         .or_else(|_| EnvFilter::try_new(default_level))
         .unwrap_or_else(|_| EnvFilter::new("warn"));
 

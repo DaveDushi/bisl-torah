@@ -1,39 +1,39 @@
-# bitul-torah
+# bisl-torah
 
 > Learn while your coding agent runs.
 
 While Claude Code (or any AI coding agent) is processing your prompt, a small popup opens beside your terminal with a piece of daily learning from [Sefaria](https://www.sefaria.org) — a halacha, a mishnah, a piece of Tanya. When the agent finishes, the popup invites you to dismiss it. The time you would have spent watching a spinner becomes time spent learning.
 
-The name is a play on the Yiddish/Hebrew concept of *bitul torah* (time wasted that could have been Torah study).
+The name plays on the Yiddish phrase *"a bisl Torah"* — "a little Torah." Instead of waiting time becoming *bitul torah* (Torah-study time wasted), it becomes a few moments of learning.
 
 ## Install
 
 ```sh
-cargo install bitul-torah
+cargo install bisl-torah
 ```
 
-Or grab a prebuilt binary from the [Releases page](https://github.com/ddusi/bitul-torah/releases).
+Or grab a prebuilt binary from the [Releases page](https://github.com/ddusi/bisl-torah/releases).
 
 > **Windows:** unsigned binary; SmartScreen may warn. Click "More info → Run anyway".
-> **macOS:** unnotarized binary; run `xattr -d com.apple.quarantine /path/to/bitul-torah` once.
+> **macOS:** unnotarized binary; run `xattr -d com.apple.quarantine /path/to/bisl-torah` once.
 
 ## Setup
 
 ```sh
-bitul-torah init       # safely merges hooks into ~/.claude/settings.json
-bitul-torah doctor     # validates the install
+bisl-torah init       # safely merges hooks into ~/.claude/settings.json
+bisl-torah doctor     # validates the install
 ```
 
 That's it. Open Claude Code, prompt it, and a popup appears.
 
 To remove:
 ```sh
-bitul-torah uninstall
+bisl-torah uninstall
 ```
 
 ## How it works
 
-`bitul-torah init` adds two hooks to your Claude Code settings:
+`bisl-torah init` adds two hooks to your Claude Code settings:
 
 - `UserPromptSubmit` → spawns a popup running the TUI
 - `Stop` → tells the popup the agent finished (you press any key to dismiss)
@@ -48,7 +48,7 @@ The popup picks a host based on what's available:
 
 ## Configuration
 
-Defaults live in `~/.bitul-torah/config.toml` (or `%APPDATA%\bitul-torah\config.toml` on Windows). `init` creates it.
+Defaults live in `~/.bisl-torah/config.toml` (or `%APPDATA%\bisl-torah\config.toml` on Windows). `init` creates it.
 
 ```toml
 # Sefaria daily-calendar categories to rotate through. Use ["*"] for all.
@@ -79,17 +79,18 @@ display = "auto"
 | `b`       | Show both Hebrew and English                 |
 | `h`       | Hebrew only                                  |
 | `e`       | English only                                 |
+| `v`       | Toggle Hebrew vowels (nikud) on/off          |
 | `f`       | Toggle footnotes drawer                      |
 
 ## Diagnostics
 
 ```sh
-bitul-torah doctor       # binary on PATH, hooks wired, Sefaria reachable, log tail
-bitul-torah show         # render once to current terminal (debug)
-bitul-torah --verbose ... # bumps log level to debug
+bisl-torah doctor       # binary on PATH, hooks wired, Sefaria reachable, log tail
+bisl-torah show         # render once to current terminal (debug)
+bisl-torah --verbose ... # bumps log level to debug
 ```
 
-Logs at `~/.bitul-torah/logs/bitul-torah.log` (daily rotation, 7-day retention).
+Logs at `~/.bisl-torah/logs/bisl-torah.log` (daily rotation, 7-day retention).
 
 ## License
 

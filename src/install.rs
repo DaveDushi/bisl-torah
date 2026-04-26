@@ -1,4 +1,4 @@
-//! Safe-merge bitul-torah hooks into Claude Code's settings.json.
+//! Safe-merge bisl-torah hooks into Claude Code's settings.json.
 
 use std::fs;
 #[cfg(test)]
@@ -34,7 +34,7 @@ fn global_settings_path() -> Result<PathBuf> {
     Ok(home.join(".claude").join("settings.json"))
 }
 
-const MARKER: &str = "bitul-torah";
+const MARKER: &str = "bisl-torah";
 
 pub fn install(scope: Scope) -> Result<InstallReport> {
     let path = scope.settings_path()?;
@@ -104,7 +104,7 @@ fn ensure_event(hooks: &mut Value, event: &str, sub: &str) -> Result<EventOutcom
         "hooks": [
             {
                 "type": "command",
-                "command": format!("bitul-torah {}", sub),
+                "command": format!("bisl-torah {}", sub),
                 "_managed_by": MARKER,
             }
         ]
@@ -314,7 +314,7 @@ mod tests {
             "hooks": {
                 "UserPromptSubmit": [
                     { "hooks": [{ "type": "command", "command": "user-script.sh" }] },
-                    { "hooks": [{ "type": "command", "command": "bitul-torah hook-on-prompt", "_managed_by": "bitul-torah" }] }
+                    { "hooks": [{ "type": "command", "command": "bisl-torah hook-on-prompt", "_managed_by": "bisl-torah" }] }
                 ]
             }
         });

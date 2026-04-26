@@ -54,6 +54,7 @@ struct App<'a> {
     session: Option<&'a Session>,
     on_next: Option<Box<NextFn<'a>>>,
     lang: Lang,
+    nikud: bool,
     scroll: u16,
     show_footnotes: bool,
     refresh_pending: bool,
@@ -69,6 +70,7 @@ pub fn run(inputs: Inputs<'_>) -> Result<()> {
         session: inputs.session,
         on_next: inputs.on_next,
         lang: inputs.config.default_lang,
+        nikud: inputs.config.nikud,
         scroll: 0,
         show_footnotes: false,
         refresh_pending: false,
@@ -141,6 +143,7 @@ fn run_loop(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) ->
                     KeyCode::Char('h') => app.lang = Lang::Hebrew,
                     KeyCode::Char('e') => app.lang = Lang::English,
                     KeyCode::Char('f') => app.show_footnotes = !app.show_footnotes,
+                    KeyCode::Char('v') => app.nikud = !app.nikud,
                     KeyCode::Char('j') | KeyCode::Down => app.scroll = app.scroll.saturating_add(1),
                     KeyCode::Char('k') | KeyCode::Up => app.scroll = app.scroll.saturating_sub(1),
                     KeyCode::PageDown => app.scroll = app.scroll.saturating_add(10),
@@ -214,12 +217,12 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
     } else {
         app.item.display_value.en.clone()
     };
-    let title_he_raw = if app.item.display_value.he.is_empty() {
+    let title_he = if app.item.display_value.he.is_empty() {
         app.item.title.he.clone()
     } else {
         app.item.display_value.he.clone()
     };
-    let title_he = bidi::visual_order(&title_he_raw);
+    let title_he = bidi::to_visual(&title_he);
 
     let columns = RLayout::default()
         .direction(Direction::Horizontal)
@@ -246,7 +249,7 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
 
 fn draw_body(f: &mut Frame, area: Rect, app: &App) {
     let resolved = layout::resolve(app.cfg.layout, area.width);
-    let (en_text, he_text) = render_bilingual(&app.text, app.cfg.nikud);
+    let (en_text, he_text) = render_bilingual(&app.text, app.nikud);
 
     match (app.lang, resolved) {
         (Lang::Both, Resolved::SideBySide) => {
@@ -282,20 +285,118 @@ fn render_pane(
     scroll: u16,
     rtl: bool,
 ) {
+    let display_title = if rtl {
+        bidi::to_visual(title)
+    } else {
+        title.to_string()
+    };
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(format!(" {} ", title));
+        .title(format!(" {} ", display_title));
     let alignment = if rtl {
         ratatui::layout::Alignment::Right
     } else {
         ratatui::layout::Alignment::Left
     };
-    let p = Paragraph::new(lines.to_vec())
-        .block(block)
-        .wrap(Wrap { trim: false })
-        .alignment(alignment)
-        .scroll((scroll, 0));
-    f.render_widget(p, area);
+
+    if rtl {
+        // ratatui's wrap operates on logical-order text; if we bidi-reorder
+        // first and then let ratatui wrap, words get split mid-character. So
+        // we wrap manually in logical order and bidi each wrapped sub-line.
+        let inner_width = area.width.saturating_sub(2) as usize;
+        let visual = wrap_and_bidi(lines, inner_width);
+        let p = Paragraph::new(visual)
+            .block(block)
+            .alignment(alignment)
+            .scroll((scroll, 0));
+        f.render_widget(p, area);
+    } else {
+        let p = Paragraph::new(lines.to_vec())
+            .block(block)
+            .wrap(Wrap { trim: false })
+            .alignment(alignment)
+            .scroll((scroll, 0));
+        f.render_widget(p, area);
+    }
+}
+
+fn wrap_and_bidi(lines: &[Line<'static>], width: usize) -> Vec<Line<'static>> {
+    if width == 0 {
+        return lines.to_vec();
+    }
+    let mut out = Vec::new();
+    for line in lines {
+        let plain: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        if plain.is_empty() {
+            out.push(Line::from(""));
+            continue;
+        }
+        let wrapped = word_wrap(&plain, width);
+        if wrapped.is_empty() {
+            out.push(Line::from(""));
+        } else {
+            for chunk in wrapped {
+                out.push(Line::from(bidi::to_visual(&chunk)));
+            }
+        }
+    }
+    out
+}
+
+fn word_wrap(s: &str, width: usize) -> Vec<String> {
+    if width == 0 || s.is_empty() {
+        return vec![s.to_string()];
+    }
+    let mut out: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let mut current_w = 0usize;
+    for word in s.split_whitespace() {
+        let word_w = cell_width(word);
+        let extra = if current.is_empty() { 0 } else { 1 };
+        if current_w + extra + word_w > width && !current.is_empty() {
+            out.push(std::mem::take(&mut current));
+            current_w = 0;
+        }
+        if !current.is_empty() {
+            current.push(' ');
+            current_w += 1;
+        }
+        if word_w > width {
+            for c in word.chars() {
+                let cw = if is_combining(c) { 0 } else { 1 };
+                if current_w + cw > width && !current.is_empty() {
+                    out.push(std::mem::take(&mut current));
+                    current_w = 0;
+                }
+                current.push(c);
+                current_w += cw;
+            }
+        } else {
+            current.push_str(word);
+            current_w += word_w;
+        }
+    }
+    if !current.is_empty() {
+        out.push(current);
+    }
+    out
+}
+
+fn cell_width(s: &str) -> usize {
+    s.chars().filter(|c| !is_combining(*c)).count()
+}
+
+fn is_combining(c: char) -> bool {
+    let cp = c as u32;
+    matches!(
+        cp,
+        0x0300..=0x036F        // combining diacritical marks
+        | 0x0591..=0x05BD      // Hebrew nikud / cantillation
+        | 0x05BF
+        | 0x05C1..=0x05C2
+        | 0x05C4..=0x05C5
+        | 0x05C7
+    )
 }
 
 fn render_bilingual(text: &RefText, nikud: bool) -> (Vec<Line<'static>>, Vec<Line<'static>>) {
@@ -306,27 +407,18 @@ fn render_bilingual(text: &RefText, nikud: bool) -> (Vec<Line<'static>>, Vec<Lin
         en_lines.extend(r.lines);
         en_lines.push(Line::from(""));
     }
+    // For Hebrew, do NOT prefix segments with LTR digits — that mixes scripts and
+    // breaks the terminal's bidi algorithm. Pass raw logical-order Hebrew and let
+    // the terminal (Windows Terminal, iTerm2, kitty, etc.) do RTL rendering.
     let mut he_lines: Vec<Line<'static>> = Vec::new();
-    for (i, seg) in text.he.iter().enumerate() {
+    for seg in text.he.iter() {
         let working = if nikud {
             seg.clone()
         } else {
             bidi::strip_nikud(seg)
         };
-        let prefixed = format!("{}. {}", i + 1, working);
-        let r = markup::render_segment(&prefixed);
-        for line in r.lines {
-            let visual: Vec<Span<'static>> = line
-                .spans
-                .into_iter()
-                .map(|s| {
-                    let style = s.style;
-                    let visual = bidi::visual_order(&s.content);
-                    Span::styled(visual, style)
-                })
-                .collect();
-            he_lines.push(Line::from(visual));
-        }
+        let r = markup::render_segment(&working);
+        he_lines.extend(r.lines);
         he_lines.push(Line::from(""));
     }
     (en_lines, he_lines)
@@ -369,7 +461,9 @@ fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
         left.push_str(" · new prompt — press n");
     }
     let right = match app.done {
-        DoneState::Running => "q quit · n next · b/h/e lang · f footnotes · j/k scroll".to_string(),
+        DoneState::Running => {
+            "q quit · n next · b/h/e lang · v vowels · f footnotes · j/k scroll".to_string()
+        }
         DoneState::AgentDone => "agent done — press any key".to_string(),
     };
 

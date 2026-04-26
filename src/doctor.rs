@@ -29,7 +29,7 @@ pub struct HookCheck {
 pub fn run() -> Result<Report> {
     let exe = std::env::current_exe()?;
     let binary_path = exe.to_string_lossy().to_string();
-    let binary_on_path = is_on_path("bitul-torah");
+    let binary_on_path = is_on_path("bisl-torah");
 
     let global = match detect_status(Scope::Global) {
         Ok(s) => HookCheck {
@@ -153,7 +153,7 @@ fn recent_log_lines(limit: usize) -> Vec<String> {
 pub fn print_report(r: &Report) {
     use std::io::Write;
     let mut out = std::io::stdout().lock();
-    writeln!(out, "bitul-torah doctor").ok();
+    writeln!(out, "bisl-torah doctor").ok();
     writeln!(out, "==================\n").ok();
     line(&mut out, "binary path", &r.binary_path);
     line(
