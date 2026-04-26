@@ -1,6 +1,6 @@
 # bisl-torah
 
-> Learn while your coding agent runs.
+> Learn Torah while your coding agent runs.
 
 While Claude Code (or any AI coding agent) is processing your prompt, a small popup opens beside your terminal with a piece of daily learning from [Sefaria](https://www.sefaria.org) — a halacha, a mishnah, a piece of Tanya. When the agent finishes, the popup invites you to dismiss it. The time you would have spent watching a spinner becomes time spent learning.
 
