@@ -61,6 +61,12 @@ enum Cmd {
         signal_dir: Option<PathBuf>,
         #[arg(long, value_enum)]
         display: Option<DisplayCli>,
+        /// Force Hebrew vowel marks (nikud) on. Overrides config.toml.
+        #[arg(long, conflicts_with = "no_nikud")]
+        nikud: bool,
+        /// Strip Hebrew vowel marks (nikud). Overrides config.toml.
+        #[arg(long = "no-nikud")]
+        no_nikud: bool,
     },
     /// Hook entry point: read JSON event from stdin and spawn the popup.
     HookOnPrompt,
@@ -99,7 +105,18 @@ fn main() {
             session,
             signal_dir,
             display,
-        } => cmd_show(session, signal_dir, display.map(Into::into)),
+            nikud,
+            no_nikud,
+        } => {
+            let nikud_override = if nikud {
+                Some(true)
+            } else if no_nikud {
+                Some(false)
+            } else {
+                None
+            };
+            cmd_show(session, signal_dir, display.map(Into::into), nikud_override)
+        }
         Cmd::HookOnPrompt => hook::on_prompt(),
         Cmd::HookOnStop => hook::on_stop(),
     };
@@ -173,11 +190,15 @@ fn cmd_show(
     session: Option<String>,
     signal_dir: Option<PathBuf>,
     display_override: Option<config::DisplayMode>,
+    nikud_override: Option<bool>,
 ) -> Result<()> {
     paths::ensure_dirs()?;
     let mut cfg = Config::load().context("loading config")?;
     if let Some(d) = display_override {
         cfg.display = d;
+    }
+    if let Some(n) = nikud_override {
+        cfg.nikud = n;
     }
 
     let mut state = State::load().unwrap_or_default();

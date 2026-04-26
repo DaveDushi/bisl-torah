@@ -82,6 +82,21 @@ display = "auto"
 | `v`       | Toggle Hebrew vowels (nikud) on/off          |
 | `f`       | Toggle footnotes drawer                      |
 
+## Hebrew display
+
+Hebrew text is rendered using whichever font your terminal emulator is configured to use. Nikud (vowel marks) and te'amim (cantillation marks) are **combining characters** — they layer onto the base letter. If the marks look misaligned, fuzzy, or fall on the wrong letter, the most likely fix is the terminal font, not the app:
+
+- **Recommended fonts**: SBL Hebrew, Ezra SIL, Taamey Frank CLM, Noto Sans Hebrew, Cardo.
+- **Windows Terminal**: Settings → Profiles → Appearance → Font face.
+- **iTerm2 / Terminal.app**: Profiles → Text → Font.
+- **VS Code integrated terminal**: `terminal.integrated.fontFamily` in settings.
+
+If your terminal still struggles, you can **strip the nikud** instead:
+
+- In the viewer: press `v` to toggle vowels on/off.
+- Persistent: set `nikud = false` in `~/.bisl-torah/config.toml`.
+- One-off: `bisl-torah show --no-nikud` (or `--nikud` to force on).
+
 ## Diagnostics
 
 ```sh

@@ -121,6 +121,7 @@ dependencies = [
  "tracing-appender",
  "tracing-subscriber",
  "unicode-bidi",
+ "unicode-segmentation",
  "windows",
 ]
 

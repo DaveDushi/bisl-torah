@@ -219,6 +219,20 @@ pub fn print_report(r: &Report) {
     .ok();
     writeln!(out).ok();
 
+    writeln!(
+        out,
+        "Hebrew rendering: uses your terminal font. For best nikud display,"
+    )
+    .ok();
+    writeln!(
+        out,
+        "  install SBL Hebrew, Ezra SIL, or Noto Sans Hebrew and set it in your terminal."
+    )
+    .ok();
+    writeln!(out, "  Toggle vowels in the viewer with `v`, or run").ok();
+    writeln!(out, "  `bisl-torah show --no-nikud` to strip them.").ok();
+    writeln!(out).ok();
+
     writeln!(out, "log dir: {}", r.log_path).ok();
     if r.recent_log_lines.is_empty() {
         writeln!(out, "  (no log entries yet)").ok();
