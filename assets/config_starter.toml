@@ -1,0 +1,22 @@
+# bitul-torah config
+
+# Which Sefaria daily-calendar categories to rotate through.
+# Use ["*"] for all categories.
+categories = ["Halakhah", "Mishnah", "Chasidut"]
+
+# "auto" = side-by-side when wide enough, stacked otherwise.
+# Other options: "side-by-side", "stacked".
+layout = "auto"
+
+# Initial language pane. Toggle in-popup with b/h/e.
+# Options: "both", "hebrew", "english".
+default_lang = "both"
+
+# Keep Hebrew vowel marks (nikud).
+nikud = true
+
+# Display host strategy.
+# "auto" picks: wt-split when in Windows Terminal, tmux-popup when in tmux,
+# else new-console.
+# Override with: "wt-split", "tmux-popup", "new-console".
+display = "auto"

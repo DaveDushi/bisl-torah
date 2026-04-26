@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "sefaria": {
+      "type": "http",
+      "url": "https://developers.sefaria.org/mcp"
+    }
+  }
+}
