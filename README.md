@@ -109,4 +109,4 @@ Logs at `~/.bisl-torah/logs/bisl-torah.log` (daily rotation, 7-day retention).
 
 ## License
 
-MIT OR Apache-2.0.
+MIT.
