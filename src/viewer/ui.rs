@@ -459,11 +459,7 @@ const KEYHINTS_RUNNING: &[&str] = &[
     "q quit",
 ];
 
-const KEYHINTS_DONE: &[&str] = &[
-    "agent done — press any key",
-    "agent done",
-    "done",
-];
+const KEYHINTS_DONE: &[&str] = &["agent done — press any key", "agent done", "done"];
 
 /// Pick the longest keyhint that leaves at least `FOOTER_TITLE_MIN + 1` cols for the title.
 /// Falls back to the shortest variant if even that doesn't fit.
@@ -509,7 +505,11 @@ fn build_footer_title(
     refresh_pending: bool,
     budget: usize,
 ) -> String {
-    let prompt_full = if refresh_pending { " · new prompt — press n" } else { "" };
+    let prompt_full = if refresh_pending {
+        " · new prompt — press n"
+    } else {
+        ""
+    };
     let prompt_short = if refresh_pending { " · n" } else { "" };
 
     let candidates: [String; 3] = [
@@ -555,7 +555,12 @@ fn draw_footer(f: &mut Frame, area: Rect, app: &App) {
     let right_w = keyhint.chars().count();
     let left_budget = footer_w.saturating_sub(right_w + 1);
 
-    let left = build_footer_title(&display, &app.item.category, app.refresh_pending, left_budget);
+    let left = build_footer_title(
+        &display,
+        &app.item.category,
+        app.refresh_pending,
+        left_budget,
+    );
 
     let columns = RLayout::default()
         .direction(Direction::Horizontal)
@@ -641,7 +646,10 @@ mod footer_tests {
     #[test]
     fn title_with_new_prompt_full() {
         let title = build_footer_title("Mishnah Middot 4:4-5", "Mishnah", true, 80);
-        assert_eq!(title, " Mishnah Middot 4:4-5 · Mishnah · new prompt — press n");
+        assert_eq!(
+            title,
+            " Mishnah Middot 4:4-5 · Mishnah · new prompt — press n"
+        );
     }
 
     #[test]

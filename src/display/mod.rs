@@ -35,12 +35,7 @@ fn auto_detect() -> Strategy {
     Strategy::NewConsole
 }
 
-pub fn spawn(
-    strategy: Strategy,
-    popup: &Popup,
-    session_id: &str,
-    signal_dir: &Path,
-) -> Result<()> {
+pub fn spawn(strategy: Strategy, popup: &Popup, session_id: &str, signal_dir: &Path) -> Result<()> {
     info!(strategy = ?strategy, session = %session_id, "spawning popup");
     let exe = current_exe_string()?;
     let signal_dir_str = signal_dir.to_string_lossy().to_string();

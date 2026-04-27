@@ -116,10 +116,7 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> Result
     Ok(())
 }
 
-fn run_loop(
-    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    editor: &mut Editor,
-) -> Result<()> {
+fn run_loop(terminal: &mut Terminal<CrosstermBackend<Stdout>>, editor: &mut Editor) -> Result<()> {
     loop {
         terminal.draw(|f| draw(f, editor))?;
 
@@ -146,17 +143,15 @@ fn run_loop(
 fn handle_browsing(editor: &mut Editor, code: KeyCode) -> Result<bool> {
     match code {
         KeyCode::Char('q') | KeyCode::Esc => return Ok(true),
-        KeyCode::Char('s') => {
-            match editor.cfg.save() {
-                Ok(()) => {
-                    editor.original = editor.cfg.clone();
-                    editor.status = Some("saved".to_string());
-                }
-                Err(e) => {
-                    editor.status = Some(format!("error: {}", e));
-                }
+        KeyCode::Char('s') => match editor.cfg.save() {
+            Ok(()) => {
+                editor.original = editor.cfg.clone();
+                editor.status = Some("saved".to_string());
             }
-        }
+            Err(e) => {
+                editor.status = Some(format!("error: {}", e));
+            }
+        },
         KeyCode::Up | KeyCode::Char('k') => {
             if editor.selected_field == 0 {
                 editor.selected_field = FIELD_LABELS.len() - 1;
@@ -177,11 +172,9 @@ fn handle_browsing(editor: &mut Editor, code: KeyCode) -> Result<bool> {
             cycle_field(editor, 1);
             editor.status = None;
         }
-        KeyCode::Char(' ') => {
-            if editor.selected_field == field_index("nikud") {
-                editor.cfg.nikud = !editor.cfg.nikud;
-                editor.status = None;
-            }
+        KeyCode::Char(' ') if editor.selected_field == field_index("nikud") => {
+            editor.cfg.nikud = !editor.cfg.nikud;
+            editor.status = None;
         }
         KeyCode::Enter => {
             if editor.selected_field == field_index("categories") {
@@ -265,8 +258,7 @@ fn step_percent(current: &str, delta: i32, default: &str) -> String {
         .or_else(|| parse_percent(default))
         .map(|f| (f * 100.0).round() as i32)
         .unwrap_or(40);
-    let next = (current_pct + delta * POPUP_STEP)
-        .clamp(POPUP_MIN_PCT as i32, POPUP_MAX_PCT as i32);
+    let next = (current_pct + delta * POPUP_STEP).clamp(POPUP_MIN_PCT as i32, POPUP_MAX_PCT as i32);
     format!("{}%", next)
 }
 
@@ -325,15 +317,16 @@ fn draw_header(f: &mut Frame, area: Rect, editor: &Editor) {
         ),
         Span::styled(
             dirty,
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
         ),
     ]);
     let path_line = Line::from(Span::styled(
         path,
         Style::default().add_modifier(Modifier::DIM),
     ));
-    let p = Paragraph::new(vec![title, path_line])
-        .block(Block::default().borders(Borders::BOTTOM));
+    let p = Paragraph::new(vec![title, path_line]).block(Block::default().borders(Borders::BOTTOM));
     f.render_widget(p, area);
 }
 
@@ -355,7 +348,11 @@ fn draw_field_list(f: &mut Frame, area: Rect, editor: &Editor) {
         .iter()
         .enumerate()
         .map(|(i, name)| {
-            let marker = if i == editor.selected_field { "▸ " } else { "  " };
+            let marker = if i == editor.selected_field {
+                "▸ "
+            } else {
+                "  "
+            };
             let style = if i == editor.selected_field {
                 Style::default()
                     .fg(Color::Yellow)
@@ -366,8 +363,7 @@ fn draw_field_list(f: &mut Frame, area: Rect, editor: &Editor) {
             Line::from(vec![Span::styled(format!("{}{}", marker, name), style)])
         })
         .collect();
-    let p = Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title(" fields "));
+    let p = Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(" fields "));
     f.render_widget(p, area);
 }
 
@@ -380,7 +376,11 @@ fn draw_value_pane(f: &mut Frame, area: Rect, editor: &Editor) {
             } else {
                 editor.cfg.categories.join(", ")
             };
-            (listed, String::new(), "press enter to edit list".to_string())
+            (
+                listed,
+                String::new(),
+                "press enter to edit list".to_string(),
+            )
         }
         "layout" => (
             layout_label(editor.cfg.layout).to_string(),
@@ -404,17 +404,26 @@ fn draw_value_pane(f: &mut Frame, area: Rect, editor: &Editor) {
         ),
         "popup.wt_width" => (
             editor.cfg.popup.wt_width.clone(),
-            format!("{}% – {}% in {}% steps", POPUP_MIN_PCT, POPUP_MAX_PCT, POPUP_STEP),
+            format!(
+                "{}% – {}% in {}% steps",
+                POPUP_MIN_PCT, POPUP_MAX_PCT, POPUP_STEP
+            ),
             "←/→ to adjust by 5% (Windows Terminal split)".to_string(),
         ),
         "popup.tmux_width" => (
             editor.cfg.popup.tmux_width.clone(),
-            format!("{}% – {}% in {}% steps", POPUP_MIN_PCT, POPUP_MAX_PCT, POPUP_STEP),
+            format!(
+                "{}% – {}% in {}% steps",
+                POPUP_MIN_PCT, POPUP_MAX_PCT, POPUP_STEP
+            ),
             "←/→ to adjust by 5% (tmux popup width)".to_string(),
         ),
         "popup.tmux_height" => (
             editor.cfg.popup.tmux_height.clone(),
-            format!("{}% – {}% in {}% steps", POPUP_MIN_PCT, POPUP_MAX_PCT, POPUP_STEP),
+            format!(
+                "{}% – {}% in {}% steps",
+                POPUP_MIN_PCT, POPUP_MAX_PCT, POPUP_STEP
+            ),
             "←/→ to adjust by 5% (tmux popup height)".to_string(),
         ),
         _ => (String::new(), String::new(), String::new()),
@@ -511,7 +520,9 @@ fn draw_footer(f: &mut Frame, area: Rect, editor: &Editor) {
     let status_style = if status.starts_with("error") {
         Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Green)
+            .add_modifier(Modifier::BOLD)
     };
     let p_status = Paragraph::new(Span::styled(status, status_style));
     let p_hint = Paragraph::new(Span::styled(

@@ -144,8 +144,7 @@ impl Config {
                 .with_context(|| format!("creating config dir {}", parent.display()))?;
         }
         let contents = toml::to_string_pretty(self).context("serializing config")?;
-        fs::write(&path, contents)
-            .with_context(|| format!("writing config {}", path.display()))?;
+        fs::write(&path, contents).with_context(|| format!("writing config {}", path.display()))?;
         Ok(())
     }
 

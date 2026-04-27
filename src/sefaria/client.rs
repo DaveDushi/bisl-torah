@@ -120,16 +120,8 @@ impl SefariaClient {
             let lang = v.language.to_lowercase();
             let segments = flatten_text(&v.text);
             match lang.as_str() {
-                "he" | "hebrew" => {
-                    if he.is_empty() {
-                        he = segments;
-                    }
-                }
-                "en" | "english" => {
-                    if en.is_empty() {
-                        en = segments;
-                    }
-                }
+                "he" | "hebrew" if he.is_empty() => he = segments,
+                "en" | "english" if en.is_empty() => en = segments,
                 _ => {}
             }
         }
@@ -152,11 +144,7 @@ fn flatten_text(value: &serde_json::Value) -> Vec<String> {
 
 fn flatten_into(value: &serde_json::Value, out: &mut Vec<String>) {
     match value {
-        serde_json::Value::String(s) => {
-            if !s.is_empty() {
-                out.push(s.clone());
-            }
-        }
+        serde_json::Value::String(s) if !s.is_empty() => out.push(s.clone()),
         serde_json::Value::Array(arr) => {
             for v in arr {
                 flatten_into(v, out);
