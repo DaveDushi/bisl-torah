@@ -14,6 +14,7 @@ mod hook;
 mod install;
 mod log;
 mod paths;
+mod programs;
 mod sefaria;
 mod settings;
 mod signals;
@@ -194,7 +195,11 @@ fn cmd_settings() -> Result<()> {
     paths::ensure_dirs()?;
     Config::ensure_starter()?;
     let cfg = Config::load().context("loading config")?;
-    settings::run(cfg)
+    let mut state = State::load().unwrap_or_default();
+    if state.needs_migration() {
+        let _ = programs::migration::run_prompt(&mut state, &cfg);
+    }
+    settings::run(cfg, state)
 }
 
 fn cmd_show(
@@ -213,9 +218,21 @@ fn cmd_show(
     }
 
     let mut state = State::load().unwrap_or_default();
-    let resolved = content::resolve_for_invocation(&cfg, state.invocation_count)?;
-    state.bump();
-    let _ = state.save();
+    if state.needs_migration() {
+        let _ = programs::migration::run_prompt(&mut state, &cfg);
+    }
+
+    let mut controller = content::build_controller(state)?;
+    let initial = match content::resolve_initial(&mut controller)? {
+        Some(r) => r,
+        None => {
+            eprintln!(
+                "no programs enrolled. run `bisl-torah settings` to enroll in a program."
+            );
+            return Ok(());
+        }
+    };
+    controller.bump_invocation();
 
     let session_obj = session.as_ref().map(|id| viewer::ui::Session {
         id: id.clone(),
@@ -224,18 +241,11 @@ fn cmd_show(
             .unwrap_or_else(|| paths::sessions_dir().unwrap_or_else(|_| PathBuf::from("."))),
     });
 
-    // Build a `next` callback that re-picks based on a fresh state bump.
-    let cfg_for_next = cfg.clone();
-    let mut next_state = state.clone();
-    let on_next: Box<viewer::ui::NextFn<'_>> =
-        Box::new(move || content::next_for(&mut next_state, &cfg_for_next));
-
     let inputs = viewer::ui::Inputs {
         config: &cfg,
-        item: &resolved.item,
-        text: &resolved.text,
+        initial,
         session: session_obj.as_ref(),
-        on_next: Some(on_next),
+        controller: Some(&mut controller),
     };
     viewer::run(inputs)
 }

@@ -161,14 +161,6 @@ impl Config {
         Ok(true)
     }
 
-    pub fn category_matches(&self, item_category: &str) -> bool {
-        if self.categories.iter().any(|c| c == "*") {
-            return true;
-        }
-        self.categories
-            .iter()
-            .any(|c| c.eq_ignore_ascii_case(item_category))
-    }
 }
 
 #[cfg(test)]
@@ -279,22 +271,6 @@ mod tests {
         assert_eq!(c.default_lang, Lang::English);
         assert!(!c.nikud);
         assert_eq!(c.display, DisplayMode::WtSplit);
-    }
-
-    #[test]
-    fn category_matching_handles_wildcard() {
-        let c = Config {
-            categories: vec!["*".into()],
-            ..Default::default()
-        };
-        assert!(c.category_matches("Whatever"));
-    }
-
-    #[test]
-    fn category_matching_is_case_insensitive() {
-        let c = Config::default();
-        assert!(c.category_matches("halakhah"));
-        assert!(!c.category_matches("Tanakh"));
     }
 
     #[test]

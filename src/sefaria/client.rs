@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
+use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
 const DEFAULT_BASE: &str = "https://www.sefaria.org";
@@ -41,7 +42,7 @@ pub struct CalendarResponse {
     pub calendar_items: Vec<CalendarItem>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RefText {
     #[serde(rename = "ref", default)]
     pub ref_: String,
@@ -49,17 +50,23 @@ pub struct RefText {
     pub he: Vec<String>,
     #[serde(default)]
     pub en: Vec<String>,
+    #[serde(default)]
+    pub next: Option<String>,
+    #[serde(default)]
+    pub prev: Option<String>,
 }
 
-/// Sefaria's `/api/v3/texts/{ref}` returns multiple `versions`. Each version has a `text`
-/// field that is either a string, list of strings, or nested list. We flatten to a flat
-/// list of segment strings for simplicity.
+/// Sefaria's `/api/v3/texts/{ref}` returns `versions`, `ref`, `next`, `prev`, etc.
 #[derive(Debug, Deserialize)]
 struct V3TextResponse {
     #[serde(default)]
     versions: Vec<V3Version>,
     #[serde(default, rename = "ref")]
     ref_: Option<String>,
+    #[serde(default)]
+    next: Option<String>,
+    #[serde(default)]
+    prev: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -68,6 +75,21 @@ struct V3Version {
     language: String,
     #[serde(default)]
     text: serde_json::Value,
+}
+
+/// Node in the Sefaria library index tree.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct IndexNode {
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default, rename = "heCategory")]
+    pub he_category: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default, rename = "heTitle")]
+    pub he_title: Option<String>,
+    #[serde(default)]
+    pub contents: Vec<IndexNode>,
 }
 
 pub struct SefariaClient {
@@ -95,18 +117,31 @@ impl SefariaClient {
         let url = format!("{}/api/calendars", self.base);
         let resp = self.http.get(&url).send()?.error_for_status()?;
         let body: CalendarResponse = resp.json().context("parsing calendar JSON")?;
-        // Drop entries without a ref — they can't be fetched.
-        let items = body
+        Ok(body
             .calendar_items
             .into_iter()
             .filter(|i| !i.ref_.trim().is_empty())
-            .collect();
-        Ok(items)
+            .collect())
+    }
+
+    pub fn fetch_calendar_for_date(&self, date: NaiveDate) -> Result<Vec<CalendarItem>> {
+        let url = format!(
+            "{}/api/calendars?year={}&month={}&day={}&diaspora=1",
+            self.base,
+            date.format("%Y"),
+            date.format("%-m"),
+            date.format("%-d"),
+        );
+        let resp = self.http.get(&url).send()?.error_for_status()?;
+        let body: CalendarResponse = resp.json().context("parsing calendar JSON")?;
+        Ok(body
+            .calendar_items
+            .into_iter()
+            .filter(|i| !i.ref_.trim().is_empty())
+            .collect())
     }
 
     pub fn fetch_text(&self, ref_: &str) -> Result<RefText> {
-        // /api/v3/texts/ accepts URL-encoded ref. The response includes versions; we want
-        // one English (return_format=text) and one Hebrew (source).
         let encoded = urlencode(ref_);
         let url = format!(
             "{}/api/v3/texts/{}?version=english&version=hebrew&return_format=text_only",
@@ -132,8 +167,18 @@ impl SefariaClient {
             ref_: body.ref_.unwrap_or_else(|| ref_.to_string()),
             he,
             en,
+            next: body.next,
+            prev: body.prev,
         })
     }
+
+    pub fn fetch_index_tree(&self) -> Result<Vec<IndexNode>> {
+        let url = format!("{}/api/index", self.base);
+        let resp = self.http.get(&url).send()?.error_for_status()?;
+        let body: Vec<IndexNode> = resp.json().context("parsing index JSON")?;
+        Ok(body)
+    }
+
 }
 
 fn flatten_text(value: &serde_json::Value) -> Vec<String> {
@@ -155,7 +200,6 @@ fn flatten_into(value: &serde_json::Value, out: &mut Vec<String>) {
 }
 
 fn urlencode(s: &str) -> String {
-    // Minimal percent-encoding for ref strings; Sefaria refs are ASCII with spaces, colons, dots.
     let mut out = String::with_capacity(s.len());
     for byte in s.bytes() {
         match byte {
@@ -206,5 +250,31 @@ mod tests {
         assert_eq!(item.ref_, "Sanhedrin 7");
         assert_eq!(item.category, "Talmud");
         assert_eq!(item.order, Some(1));
+    }
+
+    #[test]
+    fn ref_text_parses_next_prev() {
+        let raw = r#"{
+            "ref": "Mishnah Berakhot 1:2",
+            "he": ["א"],
+            "en": ["A"],
+            "next": "Mishnah Berakhot 1:3",
+            "prev": "Mishnah Berakhot 1:1"
+        }"#;
+        let t: RefText = serde_json::from_str(raw).unwrap();
+        assert_eq!(t.next.as_deref(), Some("Mishnah Berakhot 1:3"));
+        assert_eq!(t.prev.as_deref(), Some("Mishnah Berakhot 1:1"));
+    }
+
+    #[test]
+    fn ref_text_without_next_prev_is_none() {
+        let raw = r#"{
+            "ref": "Mishnah Berakhot 1:2",
+            "he": ["א"],
+            "en": ["A"]
+        }"#;
+        let t: RefText = serde_json::from_str(raw).unwrap();
+        assert_eq!(t.next, None);
+        assert_eq!(t.prev, None);
     }
 }

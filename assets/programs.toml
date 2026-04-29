@@ -1,0 +1,165 @@
+# Curated catalog of programs the user can quick-enroll in.
+#
+# `kind = "cycle"` programs hook into Sefaria's daily calendar; the
+# `calendar_title` must match the `title.en` Sefaria returns from `/api/calendars`.
+# `kind = "book"` programs walk a Sefaria text sequentially via the v3 next/prev refs.
+# `unit` is "segment" (smallest unit; e.g. one mishnah, one se'if), "section" (one
+# perek / one chapter), or "daf" (one Talmudic folio).
+
+# ----- Cycle subscriptions -----
+
+[[program]]
+id = "daf-yomi"
+display_name = "Daf Yomi"
+kind = "cycle"
+calendar_title = "Daf Yomi"
+unit = "daf"
+
+[[program]]
+id = "mishnah-yomi"
+display_name = "Mishnah Yomi"
+kind = "cycle"
+calendar_title = "Daily Mishnah"
+unit = "segment"
+
+[[program]]
+id = "tanya-yomi"
+display_name = "Tanya Yomi"
+kind = "cycle"
+calendar_title = "Tanya Yomi"
+unit = "section"
+
+[[program]]
+id = "daily-rambam"
+display_name = "Daily Rambam"
+kind = "cycle"
+calendar_title = "Daily Rambam"
+unit = "section"
+
+[[program]]
+id = "rambam-3-chapters"
+display_name = "Daily Rambam (3 Chapters)"
+kind = "cycle"
+calendar_title = "Daily Rambam (3 Chapters)"
+unit = "section"
+
+[[program]]
+id = "halakhah-yomit"
+display_name = "Halakhah Yomit"
+kind = "cycle"
+calendar_title = "Halakhah Yomit"
+unit = "segment"
+
+[[program]]
+id = "arukh-hashulchan-yomi"
+display_name = "Arukh HaShulchan Yomi"
+kind = "cycle"
+calendar_title = "Arukh HaShulchan Yomi"
+unit = "segment"
+
+[[program]]
+id = "yerushalmi-yomi"
+display_name = "Yerushalmi Yomi"
+kind = "cycle"
+calendar_title = "Yerushalmi Yomi"
+unit = "daf"
+
+[[program]]
+id = "daf-a-week"
+display_name = "Daf a Week"
+kind = "cycle"
+calendar_title = "Daf a Week"
+unit = "daf"
+
+[[program]]
+id = "929"
+display_name = "929"
+kind = "cycle"
+calendar_title = "929"
+unit = "section"
+
+[[program]]
+id = "tanakh-yomi"
+display_name = "Tanakh Yomi"
+kind = "cycle"
+calendar_title = "Tanakh Yomi"
+unit = "section"
+
+[[program]]
+id = "chok-leyisrael"
+display_name = "Chok LeYisrael"
+kind = "cycle"
+calendar_title = "Chok LeYisrael"
+unit = "section"
+
+[[program]]
+id = "shnayim-mikra"
+display_name = "Shnayim Mikra v'Echad Targum"
+kind = "cycle"
+calendar_title = "Parashat Hashavua"
+unit = "section"
+
+[[program]]
+id = "haftarah"
+display_name = "Haftarah"
+kind = "cycle"
+calendar_title = "Haftarah"
+unit = "section"
+
+# ----- Book tracks -----
+
+[[program]]
+id = "book:mishnah-berurah"
+display_name = "Mishnah Berurah"
+kind = "book"
+root_ref = "Mishnah Berurah 1:1"
+unit = "segment"
+
+[[program]]
+id = "book:kitzur-shulchan-arukh"
+display_name = "Kitzur Shulchan Arukh"
+kind = "book"
+root_ref = "Kitzur Shulchan Arukh 1:1"
+unit = "segment"
+
+[[program]]
+id = "book:tanya"
+display_name = "Tanya"
+kind = "book"
+root_ref = "Tanya, Likutei Amarim 1"
+unit = "section"
+
+[[program]]
+id = "book:mesilat-yesharim"
+display_name = "Mesilat Yesharim"
+kind = "book"
+root_ref = "Mesilat Yesharim 1"
+unit = "section"
+
+[[program]]
+id = "book:pirkei-avot"
+display_name = "Pirkei Avot"
+kind = "book"
+root_ref = "Pirkei Avot 1:1"
+unit = "segment"
+
+[[program]]
+id = "book:shulchan-arukh-orach-chayim"
+display_name = "Shulchan Arukh, Orach Chayim"
+kind = "book"
+root_ref = "Shulchan Arukh, Orach Chayim 1:1"
+unit = "segment"
+
+[[program]]
+id = "book:tehillim"
+display_name = "Tehillim"
+kind = "book"
+root_ref = "Psalms 1"
+unit = "section"
+
+[[program]]
+id = "book:mishneh-torah"
+display_name = "Mishneh Torah"
+kind = "book"
+root_ref = "Mishneh Torah, Foundations of the Torah 1:1"
+unit = "segment"

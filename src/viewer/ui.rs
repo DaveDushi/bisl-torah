@@ -16,6 +16,7 @@ use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use ratatui::{Frame, Terminal};
 
 use crate::config::{Config, Lang, Layout};
+use crate::programs::{Controller, ItemStatus, ResolvedItem};
 use crate::sefaria::{CalendarItem, RefText};
 use crate::signals;
 use crate::viewer::{
@@ -23,8 +24,6 @@ use crate::viewer::{
     layout::{self, Resolved},
     markup,
 };
-
-pub type NextFn<'a> = dyn FnMut() -> Option<(CalendarItem, RefText)> + 'a;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(150);
 
@@ -41,18 +40,21 @@ pub struct Session {
 
 pub struct Inputs<'a> {
     pub config: &'a Config,
-    pub item: &'a CalendarItem,
-    pub text: &'a RefText,
+    pub initial: ResolvedItem,
     pub session: Option<&'a Session>,
-    pub on_next: Option<Box<NextFn<'a>>>,
+    pub controller: Option<&'a mut Controller>,
 }
 
 struct App<'a> {
     cfg: &'a Config,
     item: CalendarItem,
     text: RefText,
+    program_id: String,
+    program_name: String,
+    completed_count: usize,
+    item_status: ItemStatus,
     session: Option<&'a Session>,
-    on_next: Option<Box<NextFn<'a>>>,
+    controller: Option<&'a mut Controller>,
     lang: Lang,
     nikud: bool,
     scroll: u16,
@@ -65,10 +67,14 @@ struct App<'a> {
 pub fn run(inputs: Inputs<'_>) -> Result<()> {
     let mut app = App {
         cfg: inputs.config,
-        item: inputs.item.clone(),
-        text: inputs.text.clone(),
+        item: inputs.initial.item.clone(),
+        text: inputs.initial.text.clone(),
+        program_id: inputs.initial.program_id.clone(),
+        program_name: inputs.initial.program_name.clone(),
+        completed_count: inputs.initial.completed_count,
+        item_status: inputs.initial.status,
         session: inputs.session,
-        on_next: inputs.on_next,
+        controller: inputs.controller,
         lang: inputs.config.default_lang,
         nikud: inputs.config.nikud,
         scroll: 0,
@@ -90,7 +96,6 @@ pub fn run(inputs: Inputs<'_>) -> Result<()> {
     if let Some(s) = app.session {
         let pid_path = signals::pid_path(&s.signal_dir, &s.id);
         signals::remove_quiet(&pid_path);
-        // Leave .done / .refresh-pending; cleaned up by next spawn.
     }
 
     result
@@ -116,7 +121,6 @@ fn run_loop(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) ->
     loop {
         terminal.draw(|f| draw(f, app))?;
 
-        // Signal-file polling.
         if app.last_tick.elapsed() >= POLL_INTERVAL {
             poll_signals(app);
             app.last_tick = Instant::now();
@@ -135,10 +139,11 @@ fn run_loop(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) ->
                 match k.code {
                     KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
                     _ if app.done == DoneState::AgentDone => {
-                        // Any key dismisses once agent has finished.
                         return Ok(());
                     }
-                    KeyCode::Char('n') => next_item(app),
+                    KeyCode::Char('n') => advance(app),
+                    KeyCode::Tab => rotate(app),
+                    KeyCode::Char('u') => undo(app),
                     KeyCode::Char('b') => app.lang = Lang::Both,
                     KeyCode::Char('h') => app.lang = Lang::Hebrew,
                     KeyCode::Char('e') => app.lang = Lang::English,
@@ -157,15 +162,52 @@ fn run_loop(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) ->
     }
 }
 
-fn next_item(app: &mut App) {
-    if let Some(cb) = app.on_next.as_mut() {
-        if let Some((new_item, new_text)) = cb() {
-            app.item = new_item;
-            app.text = new_text;
-            app.scroll = 0;
-            app.show_footnotes = false;
-        }
+fn advance(app: &mut App) {
+    // If already caught up on a cycle, `n` jumps to next program instead of being a no-op.
+    if app.item_status == ItemStatus::CaughtUp {
+        rotate(app);
+        return;
     }
+    let Some(ctl) = app.controller.as_deref_mut() else {
+        return;
+    };
+    if let Some(r) = ctl.advance() {
+        apply(app, r);
+    }
+    clear_refresh(app);
+}
+
+fn rotate(app: &mut App) {
+    let Some(ctl) = app.controller.as_deref_mut() else {
+        return;
+    };
+    if let Some(r) = ctl.rotate_next() {
+        apply(app, r);
+    }
+    clear_refresh(app);
+}
+
+fn undo(app: &mut App) {
+    let Some(ctl) = app.controller.as_deref_mut() else {
+        return;
+    };
+    if let Some(r) = ctl.undo() {
+        apply(app, r);
+    }
+}
+
+fn apply(app: &mut App, r: ResolvedItem) {
+    app.item = r.item;
+    app.text = r.text;
+    app.program_id = r.program_id;
+    app.program_name = r.program_name;
+    app.completed_count = r.completed_count;
+    app.item_status = r.status;
+    app.scroll = 0;
+    app.show_footnotes = false;
+}
+
+fn clear_refresh(app: &mut App) {
     if app.refresh_pending {
         if let Some(s) = app.session {
             signals::remove_quiet(&signals::refresh_path(&s.signal_dir, &s.id));
@@ -193,22 +235,32 @@ fn poll_signals(app: &mut App) {
 fn draw(f: &mut Frame, app: &App) {
     let area = f.area();
 
+    let banner_height = if matches!(app.item_status, ItemStatus::CaughtUp | ItemStatus::JustCompleted) {
+        1
+    } else {
+        0
+    };
+
     let chunks = RLayout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // header
-            Constraint::Min(5),    // body
+            Constraint::Length(banner_height),
+            Constraint::Min(5), // body
             Constraint::Length(if app.show_footnotes { 6 } else { 0 }),
             Constraint::Length(2), // footer
         ])
         .split(area);
 
     draw_header(f, chunks[0], app);
-    draw_body(f, chunks[1], app);
-    if app.show_footnotes {
-        draw_footnotes(f, chunks[2], app);
+    if banner_height > 0 {
+        draw_banner(f, chunks[1], app);
     }
-    draw_footer(f, chunks[3], app);
+    draw_body(f, chunks[2], app);
+    if app.show_footnotes {
+        draw_footnotes(f, chunks[3], app);
+    }
+    draw_footer(f, chunks[4], app);
 }
 
 fn draw_header(f: &mut Frame, area: Rect, app: &App) {
@@ -229,10 +281,23 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(area);
 
-    let en_p = Paragraph::new(Line::from(vec![Span::styled(
-        title_en,
-        Style::default().add_modifier(Modifier::BOLD),
-    )]))
+    let progress_suffix = if app.completed_count > 0 {
+        format!(" · {} done", app.completed_count)
+    } else {
+        String::new()
+    };
+    let en_top = format!("{}{}", app.program_name, progress_suffix);
+
+    let en_p = Paragraph::new(vec![
+        Line::from(Span::styled(
+            en_top,
+            Style::default().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            title_en,
+            Style::default().add_modifier(Modifier::DIM),
+        )),
+    ])
     .block(Block::default().borders(Borders::BOTTOM));
     let he_p = Paragraph::new(Line::from(vec![Span::styled(
         title_he,
@@ -245,6 +310,24 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
 
     f.render_widget(en_p, columns[0]);
     f.render_widget(he_p, columns[1]);
+}
+
+fn draw_banner(f: &mut Frame, area: Rect, app: &App) {
+    let (msg, style) = match app.item_status {
+        ItemStatus::CaughtUp => (
+            "Caught up — next entry tomorrow. (n to switch programs)".to_string(),
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::DIM),
+        ),
+        ItemStatus::JustCompleted => (
+            format!("סיום! You completed {}.", app.program_name),
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ),
+        ItemStatus::Active => (String::new(), Style::default()),
+    };
+    let p = Paragraph::new(Span::styled(msg, style));
+    f.render_widget(p, area);
 }
 
 fn draw_body(f: &mut Frame, area: Rect, app: &App) {
@@ -300,9 +383,6 @@ fn render_pane(
     };
 
     if rtl {
-        // ratatui's wrap operates on logical-order text; if we bidi-reorder
-        // first and then let ratatui wrap, words get split mid-character. So
-        // we wrap manually in logical order and bidi each wrapped sub-line.
         let inner_width = area.width.saturating_sub(2) as usize;
         let visual = wrap_and_bidi(lines, inner_width);
         let p = Paragraph::new(visual)
@@ -390,8 +470,8 @@ fn is_combining(c: char) -> bool {
     let cp = c as u32;
     matches!(
         cp,
-        0x0300..=0x036F        // combining diacritical marks
-        | 0x0591..=0x05BD      // Hebrew nikud / cantillation
+        0x0300..=0x036F
+        | 0x0591..=0x05BD
         | 0x05BF
         | 0x05C1..=0x05C2
         | 0x05C4..=0x05C5
@@ -407,9 +487,6 @@ fn render_bilingual(text: &RefText, nikud: bool) -> (Vec<Line<'static>>, Vec<Lin
         en_lines.extend(r.lines);
         en_lines.push(Line::from(""));
     }
-    // For Hebrew, do NOT prefix segments with LTR digits — that mixes scripts and
-    // breaks the terminal's bidi algorithm. Pass raw logical-order Hebrew and let
-    // the terminal (Windows Terminal, iTerm2, kitty, etc.) do RTL rendering.
     let mut he_lines: Vec<Line<'static>> = Vec::new();
     for seg in text.he.iter() {
         let working = if nikud {
@@ -453,16 +530,16 @@ fn draw_footnotes(f: &mut Frame, area: Rect, app: &App) {
 const FOOTER_TITLE_MIN: usize = 10;
 
 const KEYHINTS_RUNNING: &[&str] = &[
-    "q quit · n next · b/h/e lang · v vowels · f footnotes · j/k scroll",
-    "q quit · n next · b/h/e lang · v vowels",
+    "q quit · n next · Tab switch · u undo · b/h/e lang · v vowels · f footnotes",
+    "q quit · n next · Tab switch · u undo · b/h/e lang",
+    "q quit · n next · Tab switch · u undo",
+    "q quit · n next · Tab",
     "q quit · n next",
     "q quit",
 ];
 
 const KEYHINTS_DONE: &[&str] = &["agent done — press any key", "agent done", "done"];
 
-/// Pick the longest keyhint that leaves at least `FOOTER_TITLE_MIN + 1` cols for the title.
-/// Falls back to the shortest variant if even that doesn't fit.
 fn pick_keyhint(footer_w: usize, done: DoneState) -> &'static str {
     let variants = match done {
         DoneState::Running => KEYHINTS_RUNNING,
@@ -491,14 +568,6 @@ fn truncate_with_ellipsis(s: &str, max: usize) -> String {
     out
 }
 
-/// Build the footer's left-side title, picking the longest variant that fits in `budget` cols.
-///
-/// Tiers (longest first):
-///   1. " {citation} · {category}{prompt_full}"
-///   2. " {citation}{prompt_full}"           (drop category)
-///   3. " {citation}{prompt_short}"          (abbreviate to "· n")
-///   4. " {citation_truncated}{prompt_short}"
-///   5. " {citation_truncated}"              (drop the new-prompt indicator — last resort)
 fn build_footer_title(
     citation: &str,
     category: &str,
@@ -523,11 +592,8 @@ fn build_footer_title(
         }
     }
 
-    // Tier 4: ellipsis-truncate citation, keep "· n"
-    // Require at least 2 cols of citation budget so we keep at least one real char + ellipsis;
-    // " … · n" alone is uninformative — better to drop the suffix and show more citation.
     let suffix_count = prompt_short.chars().count();
-    let leading = 1; // leading space
+    let leading = 1;
     let cite_budget_with_suffix = budget.saturating_sub(leading + suffix_count);
     if cite_budget_with_suffix >= 2 {
         let cite = truncate_with_ellipsis(citation, cite_budget_with_suffix);
@@ -537,7 +603,6 @@ fn build_footer_title(
         }
     }
 
-    // Tier 5: drop the indicator entirely.
     let cite_budget = budget.saturating_sub(leading);
     let cite = truncate_with_ellipsis(citation, cite_budget);
     format!(" {}", cite)
@@ -590,7 +655,6 @@ fn dummy_path() -> &'static Path {
     Path::new("")
 }
 
-// Re-export Layout for callers convenience (kept private here).
 #[allow(dead_code)]
 fn _layout_marker(_l: Layout) {}
 
@@ -600,20 +664,12 @@ mod footer_tests {
 
     #[test]
     fn keyhint_full_at_wide_width() {
-        let h = pick_keyhint(120, DoneState::Running);
+        let h = pick_keyhint(160, DoneState::Running);
         assert_eq!(h, KEYHINTS_RUNNING[0]);
     }
 
     #[test]
-    fn keyhint_drops_scroll_and_footnotes_at_medium() {
-        // Full is 66 chars; full + 1 + TITLE_MIN(10) = 77. At 70 wide we should drop to medium.
-        let h = pick_keyhint(70, DoneState::Running);
-        assert_eq!(h, KEYHINTS_RUNNING[1]);
-    }
-
-    #[test]
     fn keyhint_minimal_q_n_at_narrow() {
-        // Should be wide enough for "q quit · n next" (15) + 1 + 10 = 26 but not for medium (40+1+10=51).
         let h = pick_keyhint(30, DoneState::Running);
         assert_eq!(h, "q quit · n next");
     }
@@ -626,7 +682,6 @@ mod footer_tests {
 
     #[test]
     fn keyhint_falls_back_when_nothing_fits() {
-        // Even narrower than tiny + title_min: still returns the shortest variant.
         let h = pick_keyhint(5, DoneState::Running);
         assert_eq!(h, "q quit");
     }
@@ -654,14 +709,12 @@ mod footer_tests {
 
     #[test]
     fn title_drops_category_at_medium() {
-        // " Mishnah Middot 4:4-5 · Mishnah" is 31 chars. budget=25 should drop category.
         let title = build_footer_title("Mishnah Middot 4:4-5", "Mishnah", false, 25);
         assert_eq!(title, " Mishnah Middot 4:4-5");
     }
 
     #[test]
     fn title_abbreviates_new_prompt_at_narrow() {
-        // citation(20) + " · new prompt — press n"(23) + leading(1) = 44. budget=30 forces "· n".
         let title = build_footer_title("Mishnah Middot 4:4-5", "Mishnah", true, 30);
         assert_eq!(title, " Mishnah Middot 4:4-5 · n");
     }

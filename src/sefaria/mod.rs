@@ -1,4 +1,3 @@
 pub mod client;
-pub mod select;
 
-pub use client::{CalendarItem, RefText, SefariaClient, TitlePair};
+pub use client::{CalendarItem, IndexNode, RefText, SefariaClient, TitlePair};
